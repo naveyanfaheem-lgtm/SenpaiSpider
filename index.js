@@ -1,91 +1,201 @@
-{
-  "name": "AFK Bot",
-  "bot-account": {
-    "username": "PerzaanLive",
-    "password": "",
-    "type": "offline"
-  },
-  "server": {
-    "ip": "example.aternos.me",
-    "port": 75375,
-    "version": "1.21.1"
-  },
-  "position": {
-    "enabled": true,
-    "x": 0,
-    "y": 100,
-    "z": 0
-  },
-  "utils": {
-    "auto-auth": {
-      "enabled": true,
-      "password": "Perzuu"
-    },
-    "anti-afk": {
-      "enabled": true,
-      "sneak": true
-    },
-    "chat-messages": {
-      "enabled": true,
-      "repeat": true,
-      "repeat-delay": 500,
-      "messages": [
-        "I'm a regular player",
-        "Subscribe to Perzaan Gaming!",
-        "I like to play Minecraft!"
-      ]
-    },
-    "chat-log": true,
-    "auto-reconnect": true,
-    "auto-reconnect-delay": 2000,
-    "max-reconnect-delay": 20000,
-    "periodic-rejoin": {
-      "enabled": false,
-      "min-interval": 20,
-      "max-interval": 60
-    }
-  },
-  "movement": {
-    "enabled": true,
-    "circle-walk": {
-      "enabled": true,
-      "radius": 4,
-      "speed": 3000
-    },
-    "look-around": {
-      "enabled": true,
-      "interval": 5000
-    },
-    "random-jump": {
-      "enabled": true,
-      "interval": 10000
-    }
-  },
-  "modules": {
-    "avoidMobs": true,
-    "combat": true,
-    "beds": true,
-    "chat": true,
-    "console-commands": true
-  },
-  "combat": {
-    "attack-mobs": true,
-    "auto-eat": true
-  },
-  "beds": {
-    "pick-up-day": true,
-    "place-night": true
-  },
-  "discord": {
-    "enabled": true,
-    "webhookUrl": "https://discord.com/api/webhooks/1472567640521183243/7DzSIaCSM_9-5DjzrlAuP9Tdj7Y3yAP6BHg3scKzhaRFdVk8ctWBlhOc7I8l5xC6Nqm3",
-    "events": {
-      "connect": true,
-      "disconnect": true,
-      "chat": false
-    }
-  },
-  "chat": {
-    "respond": true
-  }
-}
+const mineflayer = require('mineflayer');
+const { Movements, pathfinder, goals } = require('mineflayer-pathfinder');
+const { GoalBlock } = goals;
+const config = require('./settings.json');
+const express = require('express');
+const http = require('http');
+
+// ============================================================
+// EXPRESS SERVER - Keep Render/Aternos alive
+// ============================================================
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Bot state tracking
+let botState = {
+  connected: false,
+  lastActivity: Date.now(),
+  reconnectAttempts: 0,
+  startTime: Date.now(),
+  errors: []
+};
+
+// Health check endpoint for monitoring
+// Health check endpoint for monitoring
+app.get('/', (req, res) => {
+  // "Blue Teal Shadow" Theme - Live Dashboard
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${config.name} Status</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #0f172a; 
+            color: #f8fafc; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+          }
+          .container {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(45, 212, 191, 0.2);
+            text-align: center;
+            width: 400px;
+            border: 1px solid #334155;
+            transition: box-shadow 0.3s ease;
+          }
+          h1 { margin-bottom: 30px; font-size: 24px; color: #ccfbf1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+          .stat-card {
+            background: #0f172a;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 12px;
+            border-left: 5px solid #2dd4bf;
+            text-align: left;
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+          }
+          .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+          .value { font-size: 18px; font-weight: bold; color: #2dd4bf; text-shadow: 0 0 10px rgba(45, 212, 191, 0.5); margin-top: 5px; }
+          .status-dot { 
+            height: 12px; width: 12px; 
+            border-radius: 50%; 
+            display: inline-block; 
+            margin-right: 8px;
+            box-shadow: 0 0 10px currentColor;
+            transition: color 0.3s ease, box-shadow 0.3s ease;
+            background-color: currentColor; /* Use CSS for the dot color */
+          }
+          /* Override specific IDs to set background color for the dot */
+          #live-indicator { background-color: currentColor; }
+          
+          .pulse { animation: pulse 2s infinite; }
+          @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          .btn-guide {
+            display: inline-block; margin-top: 20px; padding: 12px 24px; 
+            background: #2dd4bf; color: #0f172a; text-decoration: none; 
+            border-radius: 8px; font-weight: bold; 
+            box-shadow: 0 0 15px rgba(45, 212, 191, 0.4);
+            transition: transform 0.2s;
+          }
+          .btn-guide:hover { transform: translateY(-2px); }
+          .connection-bar {
+            height: 4px; background: #334155; width: 100%; margin-top: 20px; border-radius: 2px; overflow: hidden;
+          }
+          .connection-fill {
+            height: 100%; width: 100%; background: #2dd4bf;
+            animation: loading 2s infinite linear;
+            transform-origin: 0% 50%;
+          }
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container" id="main-container">
+          <h1>
+            <span id="live-indicator" class="status-dot pulse" style="color: #ef4444;"></span> 
+            ${config.name}
+          </h1>
+          
+          <div class="stat-card">
+            <div class="label">Status</div>
+            <div class="value" id="status-text">Connecting...</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="label">Uptime</div>
+            <div class="value" id="uptime-text">0h 0m 0s</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="label">Coordinates</div>
+            <div class="value" id="coords-text">Waiting...</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="label">Server</div>
+            <div class="value">${config.server.ip}</div>
+          </div>
+
+          <a href="/tutorial" class="btn-guide">View Setup Guide</a>
+          
+          <div class="connection-bar">
+            <div class="connection-fill" id="activity-bar"></div>
+          </div>
+          
+          <p style="color: #64748b; font-size: 12px; margin-top: 15px;">
+            Live connection to Bot Process
+          </p>
+        </div>
+
+        <script>
+          const formatUptime = (seconds) => {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return \`\${h}h \${m}m \${s}s\`;
+          };
+
+          const updateStats = async () => {
+            try {
+              const res = await fetch('/health');
+              const data = await res.json();
+              
+              const statusText = document.getElementById('status-text');
+              const uptimeText = document.getElementById('uptime-text');
+              const coordsText = document.getElementById('coords-text');
+              const liveDot = document.getElementById('live-indicator');
+              const container = document.getElementById('main-container');
+
+              // Update Status
+              if (data.status === 'connected') {
+                statusText.innerHTML = '<span class="status-dot" style="color: #4ade80;"></span> Online & Running';
+                statusText.style.color = '#2dd4bf';
+                liveDot.style.color = '#4ade80'; // Green pulse
+                container.style.boxShadow = '0 0 50px rgba(45, 212, 191, 0.2)';
+              } else {
+                statusText.innerHTML = '<span class="status-dot" style="color: #f87171;"></span> Reconnecting...';
+                statusText.style.color = '#f87171';
+                liveDot.style.color = '#f87171'; // Red pulse
+                container.style.boxShadow = '0 0 50px rgba(248, 113, 113, 0.2)';
+              }
+
+              // Update Uptime
+              uptimeText.innerText = formatUptime(data.uptime);
+
+              // Update Coords
+              if (data.coords) {
+                coordsText.innerText = \`Coords: \${Math.floor(data.coords.x)}, \${Math.floor(data.coords.y)}, \${Math.floor(data.coords.z)}\`;
+              } else {
+                coordsText.innerText = 'Unknown Location';
+              }
+
+            } catch (e) {
+              document.getElementById('status-text').innerText = 'System Offline';
+              document.getElementById('live-indicator').style.color = '#64748b'; // Grey
+            }
+          };
+
+          // Poll every 1 second
+          setInterval(updateStats, 1000);
+          updateStats();
+        </script>
+      </body>
+    </html>
+  `);
