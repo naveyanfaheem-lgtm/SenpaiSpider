@@ -6,8 +6,8 @@
     "type": "offline"
   },
   "server": {
-    "ip": "example.aternos.me",
-    "port": 75375,
+    "ip": "SHADOW_SMP75.aternos.me",
+    "port": 53936,
     "version": "1.21.1"
   },
   "position": {
